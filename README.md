@@ -26,6 +26,7 @@ import ImagePicker from 'react-native-image-crop-picker';
 ### Select from gallery
 
 Call single image picker with cropping
+
 ```javascript
 ImagePicker.openPicker({
   width: 300,
@@ -57,7 +58,6 @@ ImagePicker.openPicker({
 ```
 
 **Android: The prop 'cropping' has been known to cause videos not to be display in the gallery on Android. Please do not set cropping to true when selecting videos.**
-
 
 ### Select from camera
 
@@ -202,7 +202,7 @@ target '<project_name>' do
   pod 'RNImageCropPicker', :path =>  '../node_modules/react-native-image-crop-picker'
 end
 
-# very important to have, unless you removed React dependencies for Libraries 
+# very important to have, unless you removed React dependencies for Libraries
 # and you rely on Cocoapods to manage it
 post_install do |installer|
   installer.pods_project.targets.each do |target|
@@ -305,7 +305,7 @@ android {
     compileSdkVersion 27
     buildToolsVersion "27.0.3"
     ...
-    
+
     defaultConfig {
       ...
       targetSdkVersion 27
