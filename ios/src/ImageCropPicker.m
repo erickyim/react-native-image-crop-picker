@@ -37,6 +37,28 @@
 @implementation ImageResult
 @end
 
+@interface LabeledCropView : RSKImageCropViewController {
+}
+@property NSString *toolbarTitle;
+@property UILabel *_moveAndScaleLabel;
+- (UILabel *)moveAndScaleLabel;
+@end
+
+@implementation LabeledCropView
+    - (UILabel *)moveAndScaleLabel
+{
+    if (!self._moveAndScaleLabel) {
+        self._moveAndScaleLabel = [[UILabel alloc] init];
+        self._moveAndScaleLabel.backgroundColor = [UIColor clearColor];
+        self._moveAndScaleLabel.text = self.toolbarTitle;
+        self._moveAndScaleLabel.textColor = [UIColor whiteColor];
+        self._moveAndScaleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self._moveAndScaleLabel.opaque = NO;
+    }
+    return self._moveAndScaleLabel;
+}
+@end
+
 @implementation ImageCropPicker
 
 RCT_EXPORT_MODULE();
@@ -50,6 +72,7 @@ RCT_EXPORT_MODULE();
                                 @"multiple": @NO,
                                 @"cropping": @NO,
                                 @"cropperCircleOverlay": @NO,
+                                @"writeTempFile": @YES,
                                 @"includeBase64": @NO,
                                 @"includeExif": @NO,
                                 @"compressVideo": @YES,
@@ -59,11 +82,15 @@ RCT_EXPORT_MODULE();
                                 @"waitAnimationEnd": @YES,
                                 @"height": @200,
                                 @"useFrontCamera": @NO,
-                                @"compressImageQuality": @1,
+                                @"avoidEmptySpaceAroundImage": @YES,
+                                @"compressImageQuality": @0.8,
                                 @"compressVideoPreset": @"MediumQuality",
                                 @"loadingLabelText": @"Processing assets...",
                                 @"mediaType": @"any",
-                                @"showsSelectedCount": @YES
+                                @"showsSelectedCount": @YES,
+                                @"forceJpg": @NO,
+                                @"cropperCancelText": @"Cancel",
+                                @"cropperChooseText": @"Choose"
                                 };
         self.compression = [[Compression alloc] init];
     }
@@ -162,14 +189,13 @@ RCT_EXPORT_METHOD(openCamera:(NSDictionary *)options
 
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary *)info {
     UIImage *chosenImage = [info objectForKey:UIImagePickerControllerOriginalImage];
-    UIImage *chosenImageT = [chosenImage fixOrientation];
 
     NSDictionary *exif;
     if([[self.options objectForKey:@"includeExif"] boolValue]) {
         exif = [info objectForKey:UIImagePickerControllerMediaMetadata];
     }
 
-    [self processSingleImagePick:chosenImageT withExif:exif withViewController:picker withSourceURL:self.croppingFile[@"sourceURL"] withLocalIdentifier:self.croppingFile[@"localIdentifier"] withFilename:self.croppingFile[@"filename"] withCreationDate:self.croppingFile[@"creationDate"] withModificationDate:self.croppingFile[@"modificationDate"]];
+    [self processSingleImagePick:chosenImage withExif:exif withViewController:picker withSourceURL:self.croppingFile[@"sourceURL"] withLocalIdentifier:self.croppingFile[@"localIdentifier"] withFilename:self.croppingFile[@"filename"] withCreationDate:self.croppingFile[@"creationDate"] withModificationDate:self.croppingFile[@"modificationDate"]];
 }
 
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
@@ -251,19 +277,43 @@ RCT_EXPORT_METHOD(openPicker:(NSDictionary *)options
             imagePickerController.minimumNumberOfSelection = abs([[self.options objectForKey:@"minFiles"] intValue]);
             imagePickerController.maximumNumberOfSelection = abs([[self.options objectForKey:@"maxFiles"] intValue]);
             imagePickerController.showsNumberOfSelectedAssets = [[self.options objectForKey:@"showsSelectedCount"] boolValue];
+            
+            NSArray *smartAlbums = [self.options objectForKey:@"smartAlbums"];
+            if (smartAlbums != nil) {
+                NSDictionary *albums = @{
+                                         //user albums
+                                         @"Regular" : @(PHAssetCollectionSubtypeAlbumRegular),
+                                         @"SyncedEvent" : @(PHAssetCollectionSubtypeAlbumSyncedEvent),
+                                         @"SyncedFaces" : @(PHAssetCollectionSubtypeAlbumSyncedFaces),
+                                         @"SyncedAlbum" : @(PHAssetCollectionSubtypeAlbumSyncedAlbum),
+                                         @"Imported" : @(PHAssetCollectionSubtypeAlbumImported),
 
-            if ([self.options objectForKey:@"smartAlbums"] != nil) {
-                NSDictionary *smartAlbums = @{
-                                              @"UserLibrary" : @(PHAssetCollectionSubtypeSmartAlbumUserLibrary),
-                                              @"PhotoStream" : @(PHAssetCollectionSubtypeAlbumMyPhotoStream),
-                                              @"Panoramas" : @(PHAssetCollectionSubtypeSmartAlbumPanoramas),
-                                              @"Videos" : @(PHAssetCollectionSubtypeSmartAlbumVideos),
-                                              @"Bursts" : @(PHAssetCollectionSubtypeSmartAlbumBursts),
-                                              };
-                NSMutableArray *albumsToShow = [NSMutableArray arrayWithCapacity:5];
-                for (NSString* album in [self.options objectForKey:@"smartAlbums"]) {
-                    if ([smartAlbums objectForKey:album] != nil) {
-                        [albumsToShow addObject:[smartAlbums objectForKey:album]];
+                                         //cloud albums
+                                         @"PhotoStream" : @(PHAssetCollectionSubtypeAlbumMyPhotoStream),
+                                         @"CloudShared" : @(PHAssetCollectionSubtypeAlbumCloudShared),
+
+                                         //smart albums
+                                         @"Generic" : @(PHAssetCollectionSubtypeSmartAlbumGeneric),
+                                         @"Panoramas" : @(PHAssetCollectionSubtypeSmartAlbumPanoramas),
+                                         @"Videos" : @(PHAssetCollectionSubtypeSmartAlbumVideos),
+                                         @"Favorites" : @(PHAssetCollectionSubtypeSmartAlbumFavorites),
+                                         @"Timelapses" : @(PHAssetCollectionSubtypeSmartAlbumTimelapses),
+                                         @"AllHidden" : @(PHAssetCollectionSubtypeSmartAlbumAllHidden),
+                                         @"RecentlyAdded" : @(PHAssetCollectionSubtypeSmartAlbumRecentlyAdded),
+                                         @"Bursts" : @(PHAssetCollectionSubtypeSmartAlbumBursts),
+                                         @"SlomoVideos" : @(PHAssetCollectionSubtypeSmartAlbumSlomoVideos),
+                                         @"UserLibrary" : @(PHAssetCollectionSubtypeSmartAlbumUserLibrary),
+                                         @"SelfPortraits" : @(PHAssetCollectionSubtypeSmartAlbumSelfPortraits),
+                                         @"Screenshots" : @(PHAssetCollectionSubtypeSmartAlbumScreenshots),
+                                         @"DepthEffect" : @(PHAssetCollectionSubtypeSmartAlbumDepthEffect),
+                                         @"LivePhotos" : @(PHAssetCollectionSubtypeSmartAlbumLivePhotos),
+                                         @"Animated" : @(PHAssetCollectionSubtypeSmartAlbumAnimated),
+                                         @"LongExposure" : @(PHAssetCollectionSubtypeSmartAlbumLongExposures),
+                                         };
+                NSMutableArray *albumsToShow = [NSMutableArray arrayWithCapacity:smartAlbums.count];
+                for (NSString* smartAlbum in smartAlbums) {
+                    if ([albums objectForKey:smartAlbum] != nil) {
+                        [albumsToShow addObject:[albums objectForKey:smartAlbum]];
                     }
                 }
                 imagePickerController.assetCollectionSubtypes = albumsToShow;
@@ -302,24 +352,28 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
         if (error) {
             self.reject(ERROR_CROPPER_IMAGE_NOT_FOUND_KEY, ERROR_CROPPER_IMAGE_NOT_FOUND_MSG, nil);
         } else {
-            [self startCropping:image];
+            [self startCropping:[image fixOrientation]];
         }
     }];
 }
 
 - (void)startCropping:(UIImage *)image {
-    RSKImageCropViewController *imageCropVC = [[RSKImageCropViewController alloc] initWithImage:image];
+    LabeledCropView *imageCropVC = [[LabeledCropView alloc] initWithImage:image];
     if ([[[self options] objectForKey:@"cropperCircleOverlay"] boolValue]) {
         imageCropVC.cropMode = RSKImageCropModeCircle;
     } else {
         imageCropVC.cropMode = RSKImageCropModeCustom;
     }
-    imageCropVC.avoidEmptySpaceAroundImage = YES;
+    imageCropVC.toolbarTitle = [[self options] objectForKey:@"cropperToolbarTitle"];
+    imageCropVC.avoidEmptySpaceAroundImage = [[[self options] objectForKey:@"avoidEmptySpaceAroundImage"] boolValue];
     imageCropVC.dataSource = self;
     imageCropVC.delegate = self;
+    NSString *cropperCancelText = [self.options objectForKey:@"cropperCancelText"];
+    NSString *cropperChooseText = [self.options objectForKey:@"cropperChooseText"];
     [imageCropVC setModalPresentationStyle:UIModalPresentationCustom];
     [imageCropVC setModalTransitionStyle:UIModalTransitionStyleCrossDissolve];
-
+    [imageCropVC.cancelButton setTitle:cropperCancelText forState:UIControlStateNormal];
+    [imageCropVC.chooseButton setTitle:cropperChooseText forState:UIControlStateNormal];
     dispatch_async(dispatch_get_main_queue(), ^{
         [[self getRootVC] presentViewController:imageCropVC animated:YES completion:nil];
     });
@@ -366,6 +420,7 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
     PHImageManager *manager = [PHImageManager defaultManager];
     PHVideoRequestOptions *options = [[PHVideoRequestOptions alloc] init];
     options.version = PHVideoRequestOptionsVersionOriginal;
+    options.networkAccessAllowed = YES;
 
     [manager
      requestAVAssetForVideo:forAsset
@@ -400,6 +455,7 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
                                                   withMime:@"video/mp4"
                                                   withSize:fileSizeValue
                                                   withData:nil
+                                                  withRect:CGRectNull
                                           withCreationDate:forAsset.creationDate
                                       withModificationDate:forAsset.modificationDate
                              ]);
@@ -410,10 +466,9 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
      }];
 }
 
-- (NSDictionary*) createAttachmentResponse:(NSString*)filePath withExif:(NSDictionary*) exif withSourceURL:(NSString*)sourceURL withLocalIdentifier:(NSString*)localIdentifier withFilename:(NSString*)filename withWidth:(NSNumber*)width withHeight:(NSNumber*)height withMime:(NSString*)mime withSize:(NSNumber*)size withData:(NSString*)data withCreationDate:(NSDate*)creationDate withModificationDate:(NSDate*)modificationDate
-{
+- (NSDictionary*) createAttachmentResponse:(NSString*)filePath withExif:(NSDictionary*) exif withSourceURL:(NSString*)sourceURL withLocalIdentifier:(NSString*)localIdentifier withFilename:(NSString*)filename withWidth:(NSNumber*)width withHeight:(NSNumber*)height withMime:(NSString*)mime withSize:(NSNumber*)size withData:(NSString*)data withRect:(CGRect)cropRect withCreationDate:(NSDate*)creationDate withModificationDate:(NSDate*)modificationDate {
     return @{
-             @"path": filePath,
+             @"path": (filePath && ![filePath isEqualToString:(@"")]) ? filePath : [NSNull null],
              @"sourceURL": (sourceURL) ? sourceURL : [NSNull null],
              @"localIdentifier": (localIdentifier) ? localIdentifier : [NSNull null],
              @"filename": (filename) ? filename : [NSNull null],
@@ -423,9 +478,29 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
              @"size": size,
              @"data": (data) ? data : [NSNull null],
              @"exif": (exif) ? exif : [NSNull null],
-             @"creationDate:": (creationDate) ? [NSString stringWithFormat:@"%.0f", [creationDate timeIntervalSince1970]] : [NSNull null],
+             @"cropRect": CGRectIsNull(cropRect) ? [NSNull null] : [ImageCropPicker cgRectToDictionary:cropRect],
+             @"creationDate": (creationDate) ? [NSString stringWithFormat:@"%.0f", [creationDate timeIntervalSince1970]] : [NSNull null],
              @"modificationDate": (modificationDate) ? [NSString stringWithFormat:@"%.0f", [modificationDate timeIntervalSince1970]] : [NSNull null],
              };
+}
+
+// See https://stackoverflow.com/questions/4147311/finding-image-type-from-nsdata-or-uiimage
+- (NSString *)determineMimeTypeFromImageData:(NSData *)data {
+    uint8_t c;
+    [data getBytes:&c length:1];
+
+    switch (c) {
+        case 0xFF:
+            return @"image/jpeg";
+        case 0x89:
+            return @"image/png";
+        case 0x47:
+            return @"image/gif";
+        case 0x49:
+        case 0x4D:
+            return @"image/tiff";
+    }
+    return @"";
 }
 
 - (void)qb_imagePickerController:
@@ -436,7 +511,7 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
     PHImageRequestOptions* options = [[PHImageRequestOptions alloc] init];
     options.synchronous = NO;
     options.networkAccessAllowed = YES;
-
+    
     if ([[[self options] objectForKey:@"multiple"] boolValue]) {
         NSMutableArray *selections = [[NSMutableArray alloc] init];
 
@@ -486,18 +561,46 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
                              [lock lock];
                              @autoreleasepool {
                                  UIImage *imgT = [UIImage imageWithData:imageData];
-                                 UIImage *imageT = [imgT fixOrientation];
+                                 
+                                 Boolean forceJpg = [[self.options valueForKey:@"forceJpg"] boolValue];
 
-                                 ImageResult *imageResult = [self.compression compressImage:imageT withOptions:self.options];
-                                 NSString *filePath = [self persistFile:imageResult.data];
+                                 NSNumber *compressQuality = [self.options valueForKey:@"compressImageQuality"];
+                                 Boolean isLossless = (compressQuality == nil || [compressQuality floatValue] >= 0.8);
 
-                                 if (filePath == nil) {
-                                     [indicatorView stopAnimating];
-                                     [overlayView removeFromSuperview];
-                                     [imagePickerController dismissViewControllerAnimated:YES completion:[self waitAnimationEnd:^{
-                                         self.reject(ERROR_CANNOT_SAVE_IMAGE_KEY, ERROR_CANNOT_SAVE_IMAGE_MSG, nil);
-                                     }]];
-                                     return;
+                                 NSNumber *maxWidth = [self.options valueForKey:@"compressImageMaxWidth"];
+                                 Boolean useOriginalWidth = (maxWidth == nil || [maxWidth integerValue] >= imgT.size.width);
+
+                                 NSNumber *maxHeight = [self.options valueForKey:@"compressImageMaxHeight"];
+                                 Boolean useOriginalHeight = (maxHeight == nil || [maxHeight integerValue] >= imgT.size.height);
+
+                                 NSString *mimeType = [self determineMimeTypeFromImageData:imageData];
+                                 Boolean isKnownMimeType = [mimeType length] > 0;
+
+                                 ImageResult *imageResult = [[ImageResult alloc] init];
+                                 if (isLossless && useOriginalWidth && useOriginalHeight && isKnownMimeType && !forceJpg) {
+                                     // Use original, unmodified image
+                                     imageResult.data = imageData;
+                                     imageResult.width = @(imgT.size.width);
+                                     imageResult.height = @(imgT.size.height);
+                                     imageResult.mime = mimeType;
+                                     imageResult.image = imgT;
+                                 } else {
+                                     imageResult = [self.compression compressImage:[imgT fixOrientation] withOptions:self.options];
+                                 }
+
+                                 NSString *filePath = @"";
+                                 if([[self.options objectForKey:@"writeTempFile"] boolValue]) {
+
+                                     filePath = [self persistFile:imageResult.data];
+
+                                     if (filePath == nil) {
+                                         [indicatorView stopAnimating];
+                                         [overlayView removeFromSuperview];
+                                         [imagePickerController dismissViewControllerAnimated:YES completion:[self waitAnimationEnd:^{
+                                             self.reject(ERROR_CANNOT_SAVE_IMAGE_KEY, ERROR_CANNOT_SAVE_IMAGE_MSG, nil);
+                                         }]];
+                                         return;
+                                     }
                                  }
 
                                  NSDictionary* exif = nil;
@@ -515,6 +618,7 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
                                                                              withMime:imageResult.mime
                                                                              withSize:[NSNumber numberWithUnsignedInteger:imageResult.data.length]
                                                                              withData:[[self.options objectForKey:@"includeBase64"] boolValue] ? [imageResult.data base64EncodedStringWithOptions:0]: nil
+                                                                             withRect:CGRectNull
                                                                      withCreationDate:phAsset.creationDate
                                                                  withModificationDate:phAsset.modificationDate
                                                         ]];
@@ -615,9 +719,9 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
         self.croppingFile[@"modifcationDate"] = modificationDate;
         NSLog(@"CroppingFile %@", self.croppingFile);
 
-        [self startCropping:image];
+        [self startCropping:[image fixOrientation]];
     } else {
-        ImageResult *imageResult = [self.compression compressImage:image withOptions:self.options];
+        ImageResult *imageResult = [self.compression compressImage:[image fixOrientation]  withOptions:self.options];
         NSString *filePath = [self persistFile:imageResult.data];
         if (filePath == nil) {
             [viewController dismissViewControllerAnimated:YES completion:[self waitAnimationEnd:^{
@@ -638,9 +742,11 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
                                              withHeight:imageResult.height
                                                withMime:imageResult.mime
                                                withSize:[NSNumber numberWithUnsignedInteger:imageResult.data.length]
-                                               withData:[[self.options objectForKey:@"includeBase64"] boolValue] ?  [imageResult.data base64EncodedStringWithOptions:0] : nil
+                                               withData:[[self.options objectForKey:@"includeBase64"] boolValue] ? [imageResult.data base64EncodedStringWithOptions:0] : nil
+                                               withRect:CGRectNull
                                        withCreationDate:creationDate
-                                   withModificationDate:modificationDate]);
+                                   withModificationDate:modificationDate
+                          ]);
         }]];
     }
 }
@@ -763,8 +869,10 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
                                            withMime:imageResult.mime
                                            withSize:[NSNumber numberWithUnsignedInteger:imageResult.data.length]
                                            withData:[[self.options objectForKey:@"includeBase64"] boolValue] ? [imageResult.data base64EncodedStringWithOptions:0] : nil
+                                           withRect:cropRect
                                    withCreationDate:self.croppingFile[@"creationDate"]
-                               withModificationDate:self.croppingFile[@"modificationDate"]]);
+                               withModificationDate:self.croppingFile[@"modificationDate"]
+                      ]);
     }]];
 }
 
@@ -792,6 +900,17 @@ RCT_EXPORT_METHOD(openCropper:(NSDictionary *)options
                   usingCropRect:(CGRect)cropRect
                   rotationAngle:(CGFloat)rotationAngle {
     [self imageCropViewController:controller didCropImage:croppedImage usingCropRect:cropRect];
+}
+
+
+
++ (NSDictionary *)cgRectToDictionary:(CGRect)rect {
+    return @{
+             @"x": [NSNumber numberWithFloat: rect.origin.x],
+             @"y": [NSNumber numberWithFloat: rect.origin.y],
+             @"width": [NSNumber numberWithFloat: CGRectGetWidth(rect)],
+             @"height": [NSNumber numberWithFloat: CGRectGetHeight(rect)]
+             };
 }
 
 @end

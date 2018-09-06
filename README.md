@@ -1,5 +1,8 @@
 # react-native-image-crop-picker
+
 iOS/Android image picker with support for camera, configurable compression, multiple images and cropping
+
+Forked from [https://github.com/ivpusic/react-native-image-crop-picker.git](https://github.com/ivpusic/react-native-image-crop-picker.git) v0.18.2 to use android lower SDK.
 
 [![Backers on Open Collective](https://opencollective.com/react-native-image-crop-picker/backers/badge.svg)](#backers) [![Sponsors on Open Collective](https://opencollective.com/react-native-image-crop-picker/sponsors/badge.svg)](#sponsors)
 
@@ -165,7 +168,7 @@ pod init
 
 After this you have to add pod dependencies to `Podfile`. Open `Podfile` with your editor, and add or adjust example configuration:
 
-```
+```ruby
 platform :ios, '8.0'
 
 target '<your_project_name>' do
@@ -176,7 +179,7 @@ end
 
 After this run:
 
-```
+```shell
 pod install
 ```
 

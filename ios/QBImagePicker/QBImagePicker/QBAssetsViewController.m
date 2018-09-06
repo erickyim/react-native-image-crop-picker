@@ -105,9 +105,18 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
 
     // Scroll to bottom
     if (self.fetchResult.count > 0 && self.isMovingToParentViewController && !self.disableScrollToBottom) {
+        __weak __typeof(self) weakSelf = self;
         NSIndexPath *indexPath = [NSIndexPath indexPathForItem:(self.fetchResult.count - 1) inSection:0];
-        [self.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionTop animated:NO];
+        float version = UIDevice.currentDevice.systemVersion.floatValue;
+        if (version < 11.0 && version >= 10.0) {
+            [self.collectionView performBatchUpdates:nil completion:^(BOOL finished) {
+                [weakSelf.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionBottom animated:NO];
+            }];
+        } else {
+            [self.collectionView scrollToItemAtIndexPath:indexPath atScrollPosition:UICollectionViewScrollPositionBottom animated:NO];
+        }
     }
+
 }
 
 - (void)viewWillDisappear:(BOOL)animated
@@ -217,8 +226,17 @@ static CGSize CGSizeScale(CGSize size, CGFloat scale) {
 
         NSString *title = [NSString stringWithFormat:format, selectedAssets.count];
         [(UIBarButtonItem *)self.toolbarItems[1] setTitle:title];
+
+        NSString *doneTitle = NSLocalizedStringFromTableInBundle(@"assets.button.item-done", @"QBImagePicker", bundle, nil);
+        [UIView setAnimationsEnabled:false];
+        [UIView performWithoutAnimation:^{
+            self.doneButton.title = [doneTitle stringByAppendingFormat:@"(%lu)", (unsigned long)selectedAssets.count];
+        }];
+        [UIView setAnimationsEnabled:true];
     } else {
         [(UIBarButtonItem *)self.toolbarItems[1] setTitle:@""];
+        NSBundle *bundle = self.imagePickerController.assetBundle;
+        self.doneButton.title = NSLocalizedStringFromTableInBundle(@"assets.button.item-done", @"QBImagePicker", bundle, nil);
     }
 }
 
